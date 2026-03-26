@@ -1,6 +1,10 @@
 #include <map>
 #include <unordered_map>
 #include <numeric>
+#include <mutex>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
 
 #include "Usings.h"
 #include "Order.h"
@@ -17,6 +21,10 @@ private:
     std::map<Price, OrderPointers, std::greater<Price>> bids_;
     std::map<Price, OrderPointers, std::less<Price>> asks_;
     std::unordered_map<OrderId, OrderEntry> orders_;
+    mutable std::mutex ordersMutex_;
+    std::thread ordersPruneThread_;
+    std::condition_variable shutdownConditionVariable_;
+    std::atomic<bool> shutdown_ { false };
 
     bool CanMatch(Side side, Price price) const{
         if (side == Side::Buy){
@@ -102,10 +110,22 @@ private:
 
         return trades;
     }
+    Orderbook::Orderbook() : ordersPruneThread_{ [this] { PruneGoodForDayOrder(); }} {}
+    
 public:
     Trades AddOrder(OrderPointer order){
         if (orders_.contains(order->GetOrderId())){
             return {};
+        }
+
+        if (order->GetOrderType() == OrderType::Market){
+            if (order->GetSide() == Side::Buy && !asks_.empty()){
+                const auto& [worstAsk, _] = *asks_.rbegin();
+                order->ToGoodTillCancel(worstAsk);
+            } else if (order->GetSide() == Side::Sell && !bids_.empty()){
+                const auto& [worstBid, _] = *bids_.rbegin();
+                order->ToGoodTillCancel(worstBid);
+            }
         }
 
         if (order->GetOrderType() == OrderType::FillAndKill && !CanMatch(order->GetSide(), order->GetPrice())){
@@ -151,6 +171,18 @@ public:
             if (orders.empty()){
                 bids_.erase(price);
             }
+        }
+    }
+
+    void PruneGoodForDayOrder(){
+        using namespace std::chrono;
+        const auto end = hours(16);
+
+        while (true){
+            const auto now = system_clock::now();
+            const auto now_c = system_clock::to_time_t(now);
+            std::tm now_parts;
+            localtime_s(&now_parts, &now_c);
         }
     }
 

@@ -3,6 +3,8 @@
 #include "Usings.h"
 #include "Side.h"
 #include "OrderType.h"
+#include "Constants.h"
+
 #include <list>
 #include <memory>
 #include <format>
@@ -19,27 +21,18 @@ public:
         , remainingQuantity_{quantity}
     {}
 
-    OrderId GetOrderId() const{
-        return orderId_;
-    }
-    Side GetSide() const{
-        return side_;
-    }
-    Price GetPrice() const{
-        return price_;
-    }
-    OrderType GetOrderType() const{
-        return orderType_;
-    }
-    Quantity GetInitialQuantity() const{
-        return initialQuantity_;
-    }
-    Quantity GetRemainingQuantity() const{
-        return remainingQuantity_;
-    }
-    Quantity GetFilledQuantity() const{
-        return GetInitialQuantity() - GetRemainingQuantity();
-    }
+    Order(OrderId orderId, Side side, Quantity quantity)
+        : Order(OrderType::Market, orderId, side, Constants::InvalidPrice, quantity)
+    {}
+
+    OrderId GetOrderId() const{return orderId_;}
+    Side GetSide() const{return side_;}
+    Price GetPrice() const{return price_;}
+    OrderType GetOrderType() const{return orderType_;}
+    Quantity GetInitialQuantity() const{return initialQuantity_;}
+    Quantity GetRemainingQuantity() const{return remainingQuantity_;}
+    Quantity GetFilledQuantity() const{return GetInitialQuantity() - GetRemainingQuantity();}
+
     bool IsFilled() const{
         return GetRemainingQuantity() == 0;
     }
@@ -50,6 +43,12 @@ public:
         }
         remainingQuantity_ -= quantity;
     }
+
+    void ToGoodTillCancel(Price price){
+        if (GetOrderType() != OrderType::Market)
+            throw std::logic_error(std::format("Order ({}) must be a tradable price.", GetOrderId()));
+    }
+
 private:
         OrderType orderType_;
         OrderId orderId_;
